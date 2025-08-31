@@ -10,7 +10,7 @@ import shutil
 CLIENT_ID = st.secrets["github"]["client_id"]
 CLIENT_SECRET = st.secrets["github"]["client_secret"]
 
-REDIRECT_URI = "http://localhost:8501"
+REDIRECT_URI = "https://pushbot.streamlit.app"
 
 st.set_page_config(page_title="GitHub Repo Pusher", layout="centered")
 st.title("🚀 GitHub Repo Pusher with OAuth & Git LFS Support")
