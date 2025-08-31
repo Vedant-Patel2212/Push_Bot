@@ -51,12 +51,15 @@ if "access_token" in st.session_state:
     private = st.checkbox("Private repository?", value=False)
     commit_message = st.text_input("Commit message", value="Commit from Streamlit App")
     branch_name = st.text_input("Branch name", value="main")
-    readme_content = st.text_area("README.md content", value=f"# {repo_name}\n\n{description}")
-    license_content = st.text_area("LICENSE content", value="MIT License")
+
+    add_readme = st.checkbox("Include README.md?", value=True)
+    readme_content = st.text_area("README.md content", value=f"# {repo_name}\n\n{description}") if add_readme else ""
+
+    add_gitignore = st.checkbox("Include .gitignore?", value=True)
+    gitignore_patterns = st.text_area("Enter .gitignore patterns (one per line)", value=".log\n.tmp") if add_gitignore else ""
 
     uploaded_files = st.file_uploader("Upload files", accept_multiple_files=True)
     uploaded_zip = st.file_uploader("Or upload a ZIP file", type=["zip"])
-    gitignore_patterns = st.text_area("Enter .gitignore patterns (one per line)", value=".log\n.tmp")
 
     if st.button("🚀 Create & Push Repository"):
         if not repo_name:
@@ -68,6 +71,7 @@ if "access_token" in st.session_state:
                 st.error(f"Failed to create repo: {response.json()}")
                 st.stop()
             repo_url = response.json()["clone_url"]
+
             temp_dir = tempfile.mkdtemp()
             try:
                 os.chdir(temp_dir)
@@ -76,10 +80,12 @@ if "access_token" in st.session_state:
                 subprocess.run(["git", "config", "user.name", user["login"]])
                 subprocess.run(["git", "lfs", "install"], check=True)
 
-                with open("README.md", "w", encoding="utf-8") as f:
-                    f.write(readme_content)
-                with open("LICENSE", "w", encoding="utf-8") as f:
-                    f.write(license_content)
+                if add_readme:
+                    with open("README.md", "w", encoding="utf-8") as f:
+                        f.write(readme_content)
+                if add_gitignore:
+                    with open(".gitignore", "w") as f:
+                        f.write(gitignore_patterns)
 
                 lfs_files = []
                 for file in uploaded_files:
@@ -100,14 +106,10 @@ if "access_token" in st.session_state:
 
                 for f_name in lfs_files:
                     subprocess.run(["git", "lfs", "track", f_name], check=True)
-
                 if lfs_files:
                     with open(".gitattributes", "w") as f:
                         for f_name in lfs_files:
                             f.write(f"{f_name} filter=lfs diff=lfs merge=lfs -text\n")
-
-                with open(".gitignore", "w") as f:
-                    f.write(gitignore_patterns)
 
                 subprocess.run(["git", "add", "."])
                 subprocess.run(["git", "commit", "-m", commit_message])
