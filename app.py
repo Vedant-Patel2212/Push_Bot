@@ -17,11 +17,9 @@ st.title("🚀 GitHub Repo Pusher (New Repo Only)")
 if "access_token" not in st.session_state:
     login_url = f"https://github.com/login/oauth/authorize?client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}&scope=repo"
     st.markdown(f"[Login with GitHub]({login_url})")
-    query_params = st.query_params
-    code = query_params.get("code")
+    code = st.experimental_get_query_params().get("code")
     if code:
-        if isinstance(code, list):
-            code = code[0]
+        code = code[0] if isinstance(code, list) else code
         res = requests.post(
             "https://github.com/login/oauth/access_token",
             headers={"Accept": "application/json"},
@@ -35,7 +33,7 @@ if "access_token" not in st.session_state:
         if "access_token" in res:
             st.session_state["access_token"] = res["access_token"]
             st.success("✅ GitHub Login Successful")
-            st.query_params.clear()
+            st.experimental_set_query_params()
         else:
             st.error(f"GitHub Auth Failed: {res}")
 
@@ -87,7 +85,7 @@ if "access_token" in st.session_state:
                     with open("README.md", "w", encoding="utf-8") as f:
                         f.write(readme_content)
                 if add_gitignore:
-                    with open(".gitignore", "w") as f:
+                    with open(".gitignore", "w", encoding="utf-8") as f:
                         f.write(gitignore_patterns)
 
                 if license_choice != "None":
