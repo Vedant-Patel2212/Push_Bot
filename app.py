@@ -17,7 +17,9 @@ st.title("🚀 GitHub Repo Pusher (New Repo Only)")
 if "access_token" not in st.session_state:
     login_url = f"https://github.com/login/oauth/authorize?client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}&scope=repo"
     st.markdown(f"[Login with GitHub]({login_url})")
-    code = st.experimental_get_query_params().get("code")
+    
+    query_params = st.query_params
+    code = query_params.get("code")
     if code:
         code = code[0] if isinstance(code, list) else code
         res = requests.post(
@@ -33,7 +35,7 @@ if "access_token" not in st.session_state:
         if "access_token" in res:
             st.session_state["access_token"] = res["access_token"]
             st.success("✅ GitHub Login Successful")
-            st.experimental_set_query_params()
+            st.query_params.clear()
         else:
             st.error(f"GitHub Auth Failed: {res}")
 
