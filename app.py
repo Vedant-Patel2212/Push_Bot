@@ -56,9 +56,11 @@ if "access_token" in st.session_state:
     readme_content = st.text_area("README.md content", value=f"# {repo_name}\n\n{description}") if add_readme else ""
     add_gitignore = st.checkbox("Include .gitignore?", value=True)
     gitignore_patterns = st.text_area("Enter .gitignore patterns (one per line)", value=".log\n.tmp") if add_gitignore else ""
+
     license_list = requests.get("https://api.github.com/licenses", headers=headers).json()
     license_options = ["None"] + [l["key"] for l in license_list if "key" in l]
     license_choice = st.selectbox("Choose a LICENSE", license_options, index=0)
+
     uploaded_files = st.file_uploader("Upload files", accept_multiple_files=True)
     uploaded_zip = st.file_uploader("Or upload a ZIP file", type=["zip"])
 
@@ -89,17 +91,14 @@ if "access_token" in st.session_state:
                         f.write(gitignore_patterns)
 
                 if license_choice != "None":
-                    lic_res = requests.get(f"https://api.github.com/licenses/{license_choice}", headers={"Accept": "application/vnd.github.v3.raw"})
+                    lic_res = requests.get(
+                        f"https://api.github.com/licenses/{license_choice}",
+                        headers={"Accept": "application/vnd.github.v3.raw"}
+                    )
                     if lic_res.status_code == 200:
                         license_text = lic_res.text
                         year = datetime.datetime.now().year
-                        fullname = user["login"]
-                        if "[year]" in license_text:
-                            license_text = license_text.replace("[year]", str(year))
-                        if "[fullname]" in license_text:
-                            license_text = license_text.replace("[fullname]", fullname)
-                        if "Copyright" not in license_text:
-                            license_text = f"Copyright (c) {year} {fullname}\n\n{license_text}"
+                        license_text = license_text.replace("[year]", str(year)).replace("[fullname]", user["login"])
                         with open("LICENSE", "w", encoding="utf-8") as f:
                             f.write(license_text)
 
