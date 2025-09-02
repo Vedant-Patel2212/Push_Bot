@@ -13,6 +13,7 @@ REDIRECT_URI = "https://pushbot.streamlit.app"
 st.set_page_config(page_title="GitHub Repo Pusher", layout="centered")
 st.title("🚀 GitHub Repo Pusher with OAuth & Git LFS Support")
 
+# GitHub OAuth Login
 if "access_token" not in st.session_state:
     login_url = f"https://github.com/login/oauth/authorize?client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}&scope=repo"
     st.markdown(f"[Login with GitHub]({login_url})")
@@ -37,6 +38,7 @@ if "access_token" not in st.session_state:
         else:
             st.error(f"GitHub Auth Failed: {res}")
 
+# After login
 if "access_token" in st.session_state:
     headers = {"Authorization": f"token {st.session_state['access_token']}"}
     user = requests.get("https://api.github.com/user", headers=headers).json()
@@ -52,9 +54,7 @@ if "access_token" in st.session_state:
     private = st.checkbox("Private repository?", value=False) if mode == "Create New Repo" else None
     commit_message = st.text_input("Commit message", value="Commit from Streamlit App")
     branch_name = st.text_input("Branch name", value="main")
-
     readme_content = st.text_area("README.md content", value=f"# {repo_name}\n\n{description}") if mode == "Create New Repo" else None
-    license_content = st.text_area("LICENSE content", value="MIT License") if mode == "Create New Repo" else None
 
     uploaded_files = st.file_uploader("Upload files", accept_multiple_files=True)
     uploaded_zip = st.file_uploader("Or upload a ZIP file", type=["zip"])
@@ -64,6 +64,7 @@ if "access_token" in st.session_state:
         if not repo_name:
             st.error("Please enter a repository name.")
         else:
+            # Create new repo
             if mode == "Create New Repo":
                 repo_data = {"name": repo_name, "description": description, "private": private}
                 response = requests.post("https://api.github.com/user/repos", headers=headers, json=repo_data)
@@ -73,6 +74,7 @@ if "access_token" in st.session_state:
                 st.success(f"✅ Repository '{repo_name}' created successfully.")
                 repo_url = response.json()["clone_url"]
             else:
+                # Existing repo
                 repo_check = requests.get(f"https://api.github.com/repos/{user['login']}/{repo_name}", headers=headers)
                 if repo_check.status_code != 200:
                     st.error(f"❌ Repository '{repo_name}' not found.")
@@ -83,17 +85,18 @@ if "access_token" in st.session_state:
             temp_dir = tempfile.mkdtemp()
             try:
                 os.chdir(temp_dir)
-                subprocess.run(["git", "init"], check=True)
+                subprocess.run(["git", "lfs", "install"], check=True)
                 subprocess.run(["git", "config", "user.email", f"{user['login']}@users.noreply.github.com"])
                 subprocess.run(["git", "config", "user.name", user["login"]])
-                subprocess.run(["git", "lfs", "install"], check=True)
 
-                if mode == "Create New Repo":
+                if mode == "Upload to Existing Repo":
+                    subprocess.run(["git", "clone", repo_url, "."], check=True)
+                else:
+                    subprocess.run(["git", "init"], check=True)
                     with open("README.md", "w", encoding="utf-8") as f:
                         f.write(readme_content)
-                    with open("LICENSE", "w", encoding="utf-8") as f:
-                        f.write(license_content)
 
+                # Handle uploaded files
                 lfs_files = []
                 for file in uploaded_files:
                     with open(file.name, "wb") as f:
@@ -101,7 +104,7 @@ if "access_token" in st.session_state:
                     if os.path.getsize(file.name) > 100 * 1024 * 1024:
                         lfs_files.append(file.name)
 
-                if uploaded_zip is not None:
+                if uploaded_zip:
                     with zipfile.ZipFile(uploaded_zip, "r") as zip_ref:
                         zip_ref.extractall(temp_dir)
                     for root, dirs, files in os.walk(temp_dir):
@@ -134,7 +137,4 @@ if "access_token" in st.session_state:
                     st.info(f"ℹ️ {len(lfs_files)} large file(s) tracked using Git LFS")
                 st.write(f"🌍 View repo: [GitHub Link]({repo_url})")
             finally:
-                try:
-                    shutil.rmtree(temp_dir)
-                except Exception:
-                    pass
+                shutil.rmtree(temp_dir)
