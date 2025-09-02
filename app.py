@@ -13,7 +13,7 @@ REDIRECT_URI = "https://pushbot.streamlit.app"
 st.set_page_config(page_title="GitHub Repo Pusher", layout="centered")
 st.title("🚀 GitHub Repo Pusher with OAuth & Git LFS Support")
 
-# GitHub OAuth Login
+# --- GitHub OAuth Login ---
 if "access_token" not in st.session_state:
     login_url = f"https://github.com/login/oauth/authorize?client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}&scope=repo"
     st.markdown(f"[Login with GitHub]({login_url})")
@@ -38,7 +38,7 @@ if "access_token" not in st.session_state:
         else:
             st.error(f"GitHub Auth Failed: {res}")
 
-# After login
+# --- After login ---
 if "access_token" in st.session_state:
     headers = {"Authorization": f"token {st.session_state['access_token']}"}
     user = requests.get("https://api.github.com/user", headers=headers).json()
@@ -64,7 +64,7 @@ if "access_token" in st.session_state:
         if not repo_name:
             st.error("Please enter a repository name.")
         else:
-            # Create new repo
+            # --- Create new repo ---
             if mode == "Create New Repo":
                 repo_data = {"name": repo_name, "description": description, "private": private}
                 response = requests.post("https://api.github.com/user/repos", headers=headers, json=repo_data)
@@ -74,7 +74,7 @@ if "access_token" in st.session_state:
                 st.success(f"✅ Repository '{repo_name}' created successfully.")
                 repo_url = response.json()["clone_url"]
             else:
-                # Existing repo
+                # --- Existing repo ---
                 repo_check = requests.get(f"https://api.github.com/repos/{user['login']}/{repo_name}", headers=headers)
                 if repo_check.status_code != 200:
                     st.error(f"❌ Repository '{repo_name}' not found.")
@@ -84,19 +84,22 @@ if "access_token" in st.session_state:
 
             temp_dir = tempfile.mkdtemp()
             try:
-                os.chdir(temp_dir)
-                subprocess.run(["git", "lfs", "install"], check=True)
-                subprocess.run(["git", "config", "user.email", f"{user['login']}@users.noreply.github.com"])
-                subprocess.run(["git", "config", "user.name", user["login"]])
-
+                # --- Clone or init repo ---
                 if mode == "Upload to Existing Repo":
-                    subprocess.run(["git", "clone", repo_url, "."], check=True)
+                    subprocess.run(["git", "clone", repo_url, temp_dir], check=True)
+                    os.chdir(temp_dir)
                 else:
+                    os.chdir(temp_dir)
                     subprocess.run(["git", "init"], check=True)
                     with open("README.md", "w", encoding="utf-8") as f:
                         f.write(readme_content)
 
-                # Handle uploaded files
+                # --- Git configuration ---
+                subprocess.run(["git", "lfs", "install"], check=True)
+                subprocess.run(["git", "config", "user.name", user["login"]], check=True)
+                subprocess.run(["git", "config", "user.email", f"{user['login']}@users.noreply.github.com"], check=True)
+
+                # --- Handle uploaded files ---
                 lfs_files = []
                 for file in uploaded_files:
                     with open(file.name, "wb") as f:
@@ -122,14 +125,20 @@ if "access_token" in st.session_state:
                         for f_name in lfs_files:
                             f.write(f"{f_name} filter=lfs diff=lfs merge=lfs -text\n")
 
+                # --- Write .gitignore ---
                 with open(".gitignore", "w") as f:
                     f.write(gitignore_patterns)
 
-                subprocess.run(["git", "add", "."])
-                subprocess.run(["git", "commit", "-m", commit_message])
-                remote_url = repo_url.replace("https://", f"https://{user['login']}:{st.session_state['access_token']}@")
-                subprocess.run(["git", "remote", "add", "origin", remote_url])
-                subprocess.run(["git", "branch", "-M", branch_name])
+                # --- Commit & push ---
+                subprocess.run(["git", "add", "."], check=True)
+                subprocess.run(["git", "commit", "-m", commit_message], check=True)
+
+                # --- Set remote URL with token ---
+                remote_url = repo_url.replace(
+                    "https://", f"https://{user['login']}:{st.session_state['access_token']}@"
+                )
+                subprocess.run(["git", "remote", "set-url", "origin", remote_url], check=True)
+                subprocess.run(["git", "branch", "-M", branch_name], check=True)
                 subprocess.run(["git", "push", "-u", "origin", branch_name], check=True)
 
                 st.success(f"🎉 Files pushed successfully to branch '{branch_name}'!")
