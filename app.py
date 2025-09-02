@@ -5,6 +5,7 @@ import zipfile
 import tempfile
 import subprocess
 import shutil
+import datetime
 
 CLIENT_ID = st.secrets["github"]["client_id"]
 CLIENT_SECRET = st.secrets["github"]["client_secret"]
@@ -58,6 +59,18 @@ if "access_token" in st.session_state:
     add_gitignore = st.checkbox("Include .gitignore?", value=True)
     gitignore_patterns = st.text_area("Enter .gitignore patterns (one per line)", value=".log\n.tmp") if add_gitignore else ""
 
+    license_options = [
+        "None",
+        "MIT",
+        "Apache-2.0",
+        "GPL-3.0",
+        "BSD-2-Clause",
+        "BSD-3-Clause",
+        "MPL-2.0",
+        "Unlicense"
+    ]
+    license_choice = st.selectbox("Choose a LICENSE", license_options, index=0)
+
     uploaded_files = st.file_uploader("Upload files", accept_multiple_files=True)
     uploaded_zip = st.file_uploader("Or upload a ZIP file", type=["zip"])
 
@@ -86,6 +99,33 @@ if "access_token" in st.session_state:
                 if add_gitignore:
                     with open(".gitignore", "w") as f:
                         f.write(gitignore_patterns)
+
+                if license_choice != "None":
+                    license_api_map = {
+                        "MIT": "mit",
+                        "Apache-2.0": "apache-2.0",
+                        "GPL-3.0": "gpl-3.0",
+                        "BSD-2-Clause": "bsd-2-clause",
+                        "BSD-3-Clause": "bsd-3-clause",
+                        "MPL-2.0": "mpl-2.0",
+                        "Unlicense": "unlicense"
+                    }
+                    lic_key = license_api_map[license_choice]
+                    lic_res = requests.get(
+                        f"https://api.github.com/licenses/{lic_key}",
+                        headers={"Accept": "application/vnd.github.v3.raw"}
+                    )
+                    if lic_res.status_code == 200:
+                        license_text = lic_res.text
+                        year = datetime.datetime.now().year
+                        copyright_line = f"Copyright (c) {year} {user['login']}"
+                        if "[year]" in license_text or "[fullname]" in license_text:
+                            license_text = license_text.replace("[year]", str(year))
+                            license_text = license_text.replace("[fullname]", user["login"])
+                        else:
+                            license_text = f"{copyright_line}\n\n{license_text}"
+                        with open("LICENSE", "w", encoding="utf-8") as f:
+                            f.write(license_text)
 
                 lfs_files = []
                 for file in uploaded_files:
