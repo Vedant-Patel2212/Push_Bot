@@ -17,11 +17,11 @@ st.title("🚀 GitHub Repo Pusher (New Repo Only)")
 if "access_token" not in st.session_state:
     login_url = f"https://github.com/login/oauth/authorize?client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}&scope=repo"
     st.markdown(f"[Login with GitHub]({login_url})")
-    
     query_params = st.query_params
     code = query_params.get("code")
     if code:
-        code = code[0] if isinstance(code, list) else code
+        if isinstance(code, list):
+            code = code[0]
         res = requests.post(
             "https://github.com/login/oauth/access_token",
             headers={"Accept": "application/json"},
@@ -56,11 +56,9 @@ if "access_token" in st.session_state:
     readme_content = st.text_area("README.md content", value=f"# {repo_name}\n\n{description}") if add_readme else ""
     add_gitignore = st.checkbox("Include .gitignore?", value=True)
     gitignore_patterns = st.text_area("Enter .gitignore patterns (one per line)", value=".log\n.tmp") if add_gitignore else ""
-
     license_list = requests.get("https://api.github.com/licenses", headers=headers).json()
     license_options = ["None"] + [l["key"] for l in license_list if "key" in l]
     license_choice = st.selectbox("Choose a LICENSE", license_options, index=0)
-
     uploaded_files = st.file_uploader("Upload files", accept_multiple_files=True)
     uploaded_zip = st.file_uploader("Or upload a ZIP file", type=["zip"])
 
@@ -87,22 +85,21 @@ if "access_token" in st.session_state:
                     with open("README.md", "w", encoding="utf-8") as f:
                         f.write(readme_content)
                 if add_gitignore:
-                    with open(".gitignore", "w", encoding="utf-8") as f:
+                    with open(".gitignore", "w") as f:
                         f.write(gitignore_patterns)
 
                 if license_choice != "None":
-                    lic_res = requests.get(
-                        f"https://api.github.com/licenses/{license_choice}",
-                        headers={"Accept": "application/vnd.github.v3.raw"}
-                    )
+                    lic_res = requests.get(f"https://api.github.com/licenses/{license_choice}", headers={"Accept": "application/vnd.github.v3.raw"})
                     if lic_res.status_code == 200:
                         license_text = lic_res.text
                         year = datetime.datetime.now().year
-                        if "[year]" in license_text or "[fullname]" in license_text:
+                        fullname = user["login"]
+                        if "[year]" in license_text:
                             license_text = license_text.replace("[year]", str(year))
-                            license_text = license_text.replace("[fullname]", user["login"])
-                        else:
-                            license_text = f"Copyright (c) {year} {user['login']}\n\n{license_text}"
+                        if "[fullname]" in license_text:
+                            license_text = license_text.replace("[fullname]", fullname)
+                        if "Copyright" not in license_text:
+                            license_text = f"Copyright (c) {year} {fullname}\n\n{license_text}"
                         with open("LICENSE", "w", encoding="utf-8") as f:
                             f.write(license_text)
 
