@@ -41,21 +41,22 @@ if "access_token" in st.session_state:
     headers = {"Authorization": f"token {st.session_state['access_token']}"}
     user = requests.get("https://api.github.com/user", headers=headers).json()
     if "login" in user:
-        st.success(f"Logged in as {user['login']}")
+        st.success(f"Logged in as *{user['login']}*")
     else:
         st.error(f"GitHub login failed: {user}")
         st.stop()
 
     mode = st.radio("Select Mode", ["Create New Repo", "Upload to Existing Repo"])
     repo_name = st.text_input("Repository name")
-    description = st.text_area("Repository description") if mode == "Create New Repo" else None
-    private = st.checkbox("Private repository", value=False) if mode == "Create New Repo" else None
+    description = st.text_area("Repository description (optional)") if mode == "Create New Repo" else None
+    private = st.checkbox("Private repository?", value=False) if mode == "Create New Repo" else None
     commit_message = st.text_input("Commit message", value="Commit from Streamlit App")
     branch_name = st.text_input("Branch name", value="main")
     readme_content = st.text_area("README.md content", value=f"# {repo_name}\n\n{description}") if mode == "Create New Repo" else None
+
     uploaded_files = st.file_uploader("Upload files", accept_multiple_files=True)
     uploaded_zip = st.file_uploader("Or upload a ZIP file", type=["zip"])
-    gitignore_patterns = st.text_area("Enter .gitignore patterns", value=".log\n.tmp")
+    gitignore_patterns = st.text_area("Enter .gitignore patterns (one per line)", value=".log\n.tmp")
 
     if st.button("Push Files"):
         if not repo_name:
@@ -67,20 +68,21 @@ if "access_token" in st.session_state:
                 if response.status_code != 201:
                     st.error(f"Failed to create repo: {response.json()}")
                     st.stop()
-                st.success(f"Repository {repo_name} created successfully.")
+                st.success(f"Repository '{repo_name}' created successfully.")
                 repo_url = response.json()["clone_url"]
             else:
                 repo_check = requests.get(f"https://api.github.com/repos/{user['login']}/{repo_name}", headers=headers)
                 if repo_check.status_code != 200:
-                    st.error(f"Repository {repo_name} not found.")
+                    st.error(f"Repository '{repo_name}' not found.")
                     st.stop()
-                st.success(f"Found existing repository {repo_name}.")
+                st.success(f"Found existing repository '{repo_name}'.")
                 repo_url = repo_check.json()["clone_url"]
 
             temp_dir = tempfile.mkdtemp()
             try:
                 if mode == "Upload to Existing Repo":
-                    subprocess.run(["git", "clone", repo_url, temp_dir], check=True)
+                    auth_repo_url = repo_url.replace("https://", f"https://{user['login']}:{st.session_state['access_token']}@")
+                    subprocess.run(["git", "clone", auth_repo_url, temp_dir], check=True)
                     os.chdir(temp_dir)
                 else:
                     os.chdir(temp_dir)
@@ -121,11 +123,11 @@ if "access_token" in st.session_state:
                 subprocess.run(["git", "commit", "-m", commit_message], check=True)
 
                 remote_url = repo_url.replace("https://", f"https://{user['login']}:{st.session_state['access_token']}@")
-                subprocess.run(["git", "remote", "add", "origin", remote_url], check=True)
-                subprocess.run(["git", "branch", "-M", branch_name], check=True)
+                subprocess.run(["git", "remote", "set-url", "origin", remote_url], check=True)
+                subprocess.run(["git", "checkout", "-B", branch_name], check=True)
                 subprocess.run(["git", "push", "-u", "origin", branch_name], check=True)
 
-                st.success(f"Files pushed successfully to branch {branch_name}")
+                st.success(f"Files pushed successfully to branch '{branch_name}'!")
                 if lfs_files:
                     st.info(f"{len(lfs_files)} large file(s) tracked using Git LFS")
                 st.write(f"View repo: [GitHub Link]({repo_url})")
