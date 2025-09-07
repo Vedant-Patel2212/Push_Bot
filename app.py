@@ -80,31 +80,30 @@ if "access_token" in st.session_state:
 
             temp_dir = tempfile.mkdtemp()
             try:
-                os.chdir(temp_dir)
                 if mode == "Upload to Existing Repo":
                     auth_repo_url = repo_url.replace("https://", f"https://{user['login']}:{st.session_state['access_token']}@")
                     subprocess.run(["git", "clone", auth_repo_url, temp_dir], check=True)
-                    os.chdir(temp_dir)
                 else:
-                    subprocess.run(["git", "init"], check=True)
-                    with open("README.md", "w", encoding="utf-8") as f:
+                    subprocess.run(["git", "init"], check=True, cwd=temp_dir)
+                    with open(os.path.join(temp_dir, "README.md"), "w", encoding="utf-8") as f:
                         f.write(readme_content)
 
-                subprocess.run(["git", "lfs", "install"], check=True)
-                subprocess.run(["git", "config", "user.name", user["login"]], check=True)
-                subprocess.run(["git", "config", "user.email", f"{user['login']}@users.noreply.github.com"], check=True)
+                subprocess.run(["git", "lfs", "install"], check=True, cwd=temp_dir)
+                subprocess.run(["git", "config", "user.name", user["login"]], check=True, cwd=temp_dir)
+                subprocess.run(["git", "config", "user.email", f"{user['login']}@users.noreply.github.com"], check=True, cwd=temp_dir)
 
                 lfs_files = []
                 for file in uploaded_files:
-                    with open(file.name, "wb") as f:
+                    file_path = os.path.join(temp_dir, file.name)
+                    with open(file_path, "wb") as f:
                         f.write(file.read())
-                    if os.path.getsize(file.name) > 100 * 1024 * 1024:
+                    if os.path.getsize(file_path) > 100 * 1024 * 1024:
                         lfs_files.append(file.name)
 
                 if uploaded_zip:
                     with zipfile.ZipFile(uploaded_zip, "r") as zip_ref:
                         zip_ref.extractall(temp_dir)
-                    for root, dirs, files in os.walk(temp_dir):
+                    for root, _, files in os.walk(temp_dir):
                         for f_name in files:
                             path = os.path.join(root, f_name)
                             if os.path.getsize(path) > 100 * 1024 * 1024:
@@ -112,28 +111,24 @@ if "access_token" in st.session_state:
                                 lfs_files.append(rel_path)
 
                 for f_name in lfs_files:
-                    subprocess.run(["git", "lfs", "track", f_name], check=True)
+                    subprocess.run(["git", "lfs", "track", f_name], check=True, cwd=temp_dir)
 
                 if lfs_files:
-                    with open(".gitattributes", "w") as f:
+                    with open(os.path.join(temp_dir, ".gitattributes"), "w") as f:
                         for f_name in lfs_files:
                             f.write(f"{f_name} filter=lfs diff=lfs merge=lfs -text\n")
 
-                with open(".gitignore", "w") as f:
+                with open(os.path.join(temp_dir, ".gitignore"), "w") as f:
                     f.write(gitignore_patterns)
 
-                subprocess.run(["git", "add", "."], check=True)
-                subprocess.run(["git", "commit", "-m", commit_message], check=True)
+                subprocess.run(["git", "add", "."], check=True, cwd=temp_dir)
+                subprocess.run(["git", "commit", "-m", commit_message], check=True, cwd=temp_dir)
 
                 remote_url = repo_url.replace("https://", f"https://{user['login']}:{st.session_state['access_token']}@")
-                remotes = subprocess.run(["git", "remote"], capture_output=True, text=True)
-                if "origin" in remotes.stdout:
-                    subprocess.run(["git", "remote", "set-url", "origin", remote_url], check=True)
-                else:
-                    subprocess.run(["git", "remote", "add", "origin", remote_url], check=True)
-
-                subprocess.run(["git", "checkout", "-B", branch_name], check=True)
-                subprocess.run(["git", "push", "-u", "origin", branch_name], check=True)
+                subprocess.run(["git", "remote", "add", "origin", remote_url], check=False, cwd=temp_dir)
+                subprocess.run(["git", "remote", "set-url", "origin", remote_url], check=True, cwd=temp_dir)
+                subprocess.run(["git", "checkout", "-B", branch_name], check=True, cwd=temp_dir)
+                subprocess.run(["git", "push", "-u", "origin", branch_name], check=True, cwd=temp_dir)
 
                 st.success(f"Files pushed successfully to branch '{branch_name}'!")
                 if lfs_files:
