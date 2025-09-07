@@ -98,7 +98,8 @@ if "access_token" in st.session_state:
                     with open(file_path, "wb") as f:
                         f.write(file.read())
                     if os.path.getsize(file_path) > 100 * 1024 * 1024:
-                        lfs_files.append(file.name)
+                        rel_path = os.path.relpath(file_path, temp_dir).replace("\\", "/")
+                        lfs_files.append(rel_path)
 
                 if uploaded_zip:
                     with zipfile.ZipFile(uploaded_zip, "r") as zip_ref:
@@ -107,21 +108,26 @@ if "access_token" in st.session_state:
                         for f_name in files:
                             path = os.path.join(root, f_name)
                             if os.path.getsize(path) > 100 * 1024 * 1024:
-                                rel_path = os.path.relpath(path, temp_dir)
+                                rel_path = os.path.relpath(path, temp_dir).replace("\\", "/")
                                 lfs_files.append(rel_path)
-
-                for f_name in lfs_files:
-                    subprocess.run(["git", "lfs", "track", f_name], check=True, cwd=temp_dir)
-
-                if lfs_files:
-                    with open(os.path.join(temp_dir, ".gitattributes"), "w") as f:
-                        for f_name in lfs_files:
-                            f.write(f"{f_name} filter=lfs diff=lfs merge=lfs -text\n")
 
                 with open(os.path.join(temp_dir, ".gitignore"), "w") as f:
                     f.write(gitignore_patterns)
 
                 subprocess.run(["git", "add", "."], check=True, cwd=temp_dir)
+
+                if lfs_files:
+                    for f_name in lfs_files:
+                        subprocess.run(["git", "reset", "HEAD", f_name], check=True, cwd=temp_dir)
+                        subprocess.run(["git", "lfs", "track", f_name], check=True, cwd=temp_dir)
+                    gitattributes_path = os.path.join(temp_dir, ".gitattributes")
+                    with open(gitattributes_path, "a") as f:
+                        for f_name in lfs_files:
+                            f.write(f"{f_name} filter=lfs diff=lfs merge=lfs -text\n")
+                    subprocess.run(["git", "add", ".gitattributes"], check=True, cwd=temp_dir)
+                    for f_name in lfs_files:
+                        subprocess.run(["git", "add", f_name], check=True, cwd=temp_dir)
+
                 subprocess.run(["git", "commit", "-m", commit_message], check=True, cwd=temp_dir)
 
                 remote_url = repo_url.replace("https://", f"https://{user['login']}:{st.session_state['access_token']}@")
