@@ -89,6 +89,7 @@ if "access_token" in st.session_state:
                     subprocess.run(["git", "init"], check=True)
                     with open("README.md", "w", encoding="utf-8") as f:
                         f.write(readme_content)
+
                 subprocess.run(["git", "lfs", "install"], check=True)
                 subprocess.run(["git", "config", "user.name", user["login"]], check=True)
                 subprocess.run(["git", "config", "user.email", f"{user['login']}@users.noreply.github.com"], check=True)
@@ -117,8 +118,10 @@ if "access_token" in st.session_state:
                     with open(".gitattributes", "w") as f:
                         for f_name in lfs_files:
                             f.write(f"{f_name} filter=lfs diff=lfs merge=lfs -text\n")
+
                 with open(".gitignore", "w") as f:
                     f.write(gitignore_patterns)
+
                 subprocess.run(["git", "add", "."], check=True)
                 subprocess.run(["git", "commit", "-m", commit_message], check=True)
 
