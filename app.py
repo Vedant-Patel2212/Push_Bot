@@ -80,12 +80,12 @@ if "access_token" in st.session_state:
 
             temp_dir = tempfile.mkdtemp()
             try:
+                os.chdir(temp_dir)
                 if mode == "Upload to Existing Repo":
                     auth_repo_url = repo_url.replace("https://", f"https://{user['login']}:{st.session_state['access_token']}@")
                     subprocess.run(["git", "clone", auth_repo_url, temp_dir], check=True)
                     os.chdir(temp_dir)
                 else:
-                    os.chdir(temp_dir)
                     subprocess.run(["git", "init"], check=True)
                     with open("README.md", "w", encoding="utf-8") as f:
                         f.write(readme_content)
@@ -126,7 +126,12 @@ if "access_token" in st.session_state:
                 subprocess.run(["git", "commit", "-m", commit_message], check=True)
 
                 remote_url = repo_url.replace("https://", f"https://{user['login']}:{st.session_state['access_token']}@")
-                subprocess.run(["git", "remote", "set-url", "origin", remote_url], check=True)
+                remotes = subprocess.run(["git", "remote"], capture_output=True, text=True)
+                if "origin" in remotes.stdout:
+                    subprocess.run(["git", "remote", "set-url", "origin", remote_url], check=True)
+                else:
+                    subprocess.run(["git", "remote", "add", "origin", remote_url], check=True)
+
                 subprocess.run(["git", "checkout", "-B", branch_name], check=True)
                 subprocess.run(["git", "push", "-u", "origin", branch_name], check=True)
 
