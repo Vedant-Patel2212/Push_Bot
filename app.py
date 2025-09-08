@@ -3,7 +3,7 @@ import tempfile
 import subprocess
 import streamlit as st
 
-st.title("GitHub File Uploader with LFS and Branch Auto-Create")
+st.title("GitHub File Uploader with LFS")
 
 repo_url = st.text_input("Repository URL (HTTPS)", "")
 branch_name = st.text_input("Branch name", "main")
