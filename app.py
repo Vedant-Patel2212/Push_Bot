@@ -58,6 +58,14 @@ if "access_token" in st.session_state:
     uploaded_zip = st.file_uploader("Or upload a ZIP file", type=["zip"])
     gitignore_patterns = st.text_area("Enter .gitignore patterns (one per line)", value=".log\n.tmp")
 
+    target_folder = "/"
+    if mode == "Upload to Existing Repo" and repo_name:
+        repo_check = requests.get(f"https://api.github.com/repos/{user['login']}/{repo_name}/contents", headers=headers)
+        if repo_check.status_code == 200:
+            contents = repo_check.json()
+            folders = [item["path"] for item in contents if item["type"] == "dir"]
+            target_folder = st.selectbox("Select folder to push file into", ["/ (root)"] + folders)
+
     if st.button("Push Files"):
         if not repo_name:
             st.error("Please enter a repository name.")
@@ -93,18 +101,22 @@ if "access_token" in st.session_state:
                 subprocess.run(["git", "config", "user.email", f"{user['login']}@users.noreply.github.com"], check=True, cwd=temp_dir)
 
                 large_files = []
+                save_path = temp_dir if target_folder == "/ (root)" else os.path.join(temp_dir, target_folder)
+                os.makedirs(save_path, exist_ok=True)
+
                 if uploaded_files:
                     for file in uploaded_files:
-                        file_path = os.path.join(temp_dir, file.name)
+                        file_path = os.path.join(save_path, file.name)
                         with open(file_path, "wb") as f:
                             f.write(file.read())
                         if os.path.getsize(file_path) > 100 * 1024 * 1024:
-                            large_files.append(file.name)
+                            rel_path = os.path.relpath(file_path, temp_dir)
+                            large_files.append(rel_path)
 
                 if uploaded_zip:
                     with zipfile.ZipFile(uploaded_zip, "r") as zip_ref:
-                        zip_ref.extractall(temp_dir)
-                    for root, _, files in os.walk(temp_dir):
+                        zip_ref.extractall(save_path)
+                    for root, _, files in os.walk(save_path):
                         for f_name in files:
                             path = os.path.join(root, f_name)
                             if os.path.getsize(path) > 100 * 1024 * 1024:
@@ -112,39 +124,30 @@ if "access_token" in st.session_state:
                                 large_files.append(rel_path)
 
                 if large_files:
-                    subprocess.run(["git", "lfs", "track"] + large_files, check=True, cwd=temp_dir)
-                    gitattributes_path = os.path.join(temp_dir, ".gitattributes")
-                    existing_lines = set()
-                    if os.path.exists(gitattributes_path):
-                        with open(gitattributes_path, "r") as f:
-                            existing_lines = set(f.readlines())
-                    with open(gitattributes_path, "a") as f:
-                        for f_name in large_files:
-                            line = f"{f_name} filter=lfs diff=lfs merge=lfs -text\n"
-                            if line not in existing_lines:
-                                f.write(line)
+                    for f in large_files:
+                        subprocess.run(["git", "lfs", "track", f], check=True, cwd=temp_dir)
+                    with open(os.path.join(temp_dir, ".gitattributes"), "a") as f:
+                        for f in large_files:
+                            f.write(f"{f} filter=lfs diff=lfs merge=lfs -text\n")
                     subprocess.run(["git", "add", ".gitattributes"], check=True, cwd=temp_dir)
 
                 with open(os.path.join(temp_dir, ".gitignore"), "w") as f:
                     f.write(gitignore_patterns)
 
                 subprocess.run(["git", "add", "."], check=True, cwd=temp_dir)
-                try:
-                    subprocess.run(["git", "commit", "-m", commit_message], check=True, cwd=temp_dir)
-                except subprocess.CalledProcessError:
-                    st.warning("No changes to commit.")
+                subprocess.run(["git", "commit", "-m", commit_message], check=True, cwd=temp_dir)
 
                 remote_url = repo_url.replace("https://", f"https://{user['login']}:{st.session_state['access_token']}@")
                 subprocess.run(["git", "remote", "add", "origin", remote_url], check=False, cwd=temp_dir)
                 subprocess.run(["git", "remote", "set-url", "origin", remote_url], check=True, cwd=temp_dir)
 
-                result = subprocess.run(["git", "ls-remote", "--heads", "origin", branch_name], cwd=temp_dir, capture_output=True, text=True)
-                if not result.stdout.strip():
-                    st.info(f"Branch '{branch_name}' does not exist. Creating it.")
-                    subprocess.run(["git", "push", "origin", f"HEAD:{branch_name}"], check=True, cwd=temp_dir)
-                else:
-                    subprocess.run(["git", "checkout", "-B", branch_name], check=True, cwd=temp_dir)
-                    subprocess.run(["git", "push", "-u", "origin", branch_name], check=True, cwd=temp_dir)
+                if branch_name == "master":
+                    result = subprocess.run(["git", "ls-remote", "--heads", "origin", "master"], cwd=temp_dir, capture_output=True, text=True)
+                    if not result.stdout.strip():
+                        branch_name = "main"
+
+                subprocess.run(["git", "checkout", "-B", branch_name], check=True, cwd=temp_dir)
+                subprocess.run(["git", "push", "-u", "origin", branch_name], check=True, cwd=temp_dir)
 
                 st.success(f"Files pushed successfully to branch '{branch_name}'!")
                 if large_files:
