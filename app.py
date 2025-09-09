@@ -142,11 +142,6 @@ if "access_token" in st.session_state:
                 subprocess.run(["git", "remote", "add", "origin", remote_url], check=False, cwd=temp_dir)
                 subprocess.run(["git", "remote", "set-url", "origin", remote_url], check=True, cwd=temp_dir)
 
-                if branch_name == "master":
-                    result = subprocess.run(["git", "ls-remote", "--heads", "origin", "master"], cwd=temp_dir, capture_output=True, text=True)
-                    if not result.stdout.strip():
-                        branch_name = "main"
-
                 subprocess.run(["git", "checkout", "-B", branch_name], check=True, cwd=temp_dir)
                 subprocess.run(["git", "push", "-u", "origin", branch_name], check=True, cwd=temp_dir)
 
