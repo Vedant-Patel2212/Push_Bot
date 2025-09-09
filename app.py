@@ -11,7 +11,7 @@ CLIENT_SECRET = st.secrets["github"]["client_secret"]
 REDIRECT_URI = "https://pushbot.streamlit.app"
 
 st.set_page_config(page_title="GitHub Repo Pusher", layout="centered")
-st.title("GitHub Repo Pusher with Git LFS Support")
+st.title("GitHub Repo Pusher")
 
 if "access_token" not in st.session_state:
     login_url = f"https://github.com/login/oauth/authorize?client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}&scope=repo"
@@ -50,7 +50,7 @@ if "access_token" in st.session_state:
     repo_name = st.text_input("Repository name")
     description = st.text_area("Repository description (optional)") if mode == "Create New Repo" else None
     private = st.checkbox("Private repository?", value=False) if mode == "Create New Repo" else None
-    commit_message = st.text_input("Commit message", value="Commit from Streamlit App")
+    commit_message = st.text_input("Commit message", value="By Bot")
     branch_name = st.text_input("Branch name", value="main")
     readme_content = st.text_area("README.md content", value=f"# {repo_name}\n\n{description}") if mode == "Create New Repo" else None
 
@@ -101,7 +101,7 @@ if "access_token" in st.session_state:
                 subprocess.run(["git", "config", "user.email", f"{user['login']}@users.noreply.github.com"], check=True, cwd=temp_dir)
 
                 large_files = []
-                save_path = temp_dir if target_folder == "/ (root)" else os.path.join(temp_dir, target_folder)
+                save_path = temp_dir if target_folder.startswith("/") else os.path.join(temp_dir, target_folder)
                 os.makedirs(save_path, exist_ok=True)
 
                 if uploaded_files:
@@ -124,6 +124,7 @@ if "access_token" in st.session_state:
                                 large_files.append(rel_path)
 
                 if large_files:
+                    large_files = list(set(large_files))
                     for f in large_files:
                         subprocess.run(["git", "lfs", "track", f], check=True, cwd=temp_dir)
                     with open(os.path.join(temp_dir, ".gitattributes"), "a") as f:
@@ -131,8 +132,8 @@ if "access_token" in st.session_state:
                             f.write(f"{f} filter=lfs diff=lfs merge=lfs -text\n")
                     subprocess.run(["git", "add", ".gitattributes"], check=True, cwd=temp_dir)
 
-                with open(os.path.join(temp_dir, ".gitignore"), "w") as f:
-                    f.write(gitignore_patterns)
+                with open(os.path.join(temp_dir, ".gitignore"), "a") as f:
+                    f.write("\n" + gitignore_patterns.strip() + "\n")
 
                 subprocess.run(["git", "add", "."], check=True, cwd=temp_dir)
                 subprocess.run(["git", "commit", "-m", commit_message], check=True, cwd=temp_dir)
@@ -153,5 +154,6 @@ if "access_token" in st.session_state:
                 if large_files:
                     st.info(f"{len(large_files)} large file(s) tracked using Git LFS")
                 st.write(f"View repo: [GitHub Link]({repo_url})")
+
             finally:
                 shutil.rmtree(temp_dir)
